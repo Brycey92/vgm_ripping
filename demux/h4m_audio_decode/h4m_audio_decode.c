@@ -10,7 +10,7 @@
 
 /* big endian */
 
-static uint8_t get8(FILE *infile)
+static uint8_t get8(FILE* infile)
 {
     uint8_t buf[1];
     if (1 != fread(buf, 1, 1, infile))
@@ -22,7 +22,7 @@ static uint8_t get8(FILE *infile)
     return buf[0];
 }
 
-static uint16_t read16(uint8_t * buf)
+static uint16_t read16(uint8_t* buf)
 {
     uint32_t v = 0;
     for (int i = 0; i < 2; i++)
@@ -33,7 +33,7 @@ static uint16_t read16(uint8_t * buf)
     return v;
 }
 
-static uint16_t get16(FILE * infile)
+static uint16_t get16(FILE* infile)
 {
     uint8_t buf[2];
     if (2 != fread(buf, 1, 2, infile))
@@ -44,7 +44,7 @@ static uint16_t get16(FILE * infile)
     return read16(buf);
 }
 
-static uint32_t read32(uint8_t * buf)
+static uint32_t read32(uint8_t* buf)
 {
     uint32_t v = 0;
     for (int i = 0; i < 4; i++)
@@ -55,7 +55,7 @@ static uint32_t read32(uint8_t * buf)
     return v;
 }
 
-static uint32_t get32(FILE * infile)
+static uint32_t get32(FILE* infile)
 {
     uint8_t buf[4];
     if (4 != fread(buf, 1, 4, infile))
@@ -66,13 +66,13 @@ static uint32_t get32(FILE * infile)
     return read32(buf);
 }
 
-static void expect32(uint32_t expected, FILE * infile)
+static void expect32(uint32_t expected, FILE* infile)
 {
     uint32_t v = get32(infile);
     if (v != expected)
     {
         fprintf(stderr, "expected 0x%08"PRIx32" at 0x%lx, got 0x%08"PRIx32"\n",
-            expected, ftell(infile)-4, v);
+            expected, ftell(infile) - 4, v);
         exit(EXIT_FAILURE);
     }
 }
@@ -87,7 +87,7 @@ static void expect32_imm(uint32_t expected, uint32_t actual, unsigned long offse
     }
 }
 
-static void expect32_text(uint32_t expected, uint32_t actual, char *name)
+static void expect32_text(uint32_t expected, uint32_t actual, char* name)
 {
     if (expected != actual)
     {
@@ -97,7 +97,7 @@ static void expect32_text(uint32_t expected, uint32_t actual, char *name)
     }
 }
 
-static void seek_past(uint32_t offset, FILE * infile)
+static void seek_past(uint32_t offset, FILE* infile)
 {
     if (-1 == fseek(infile, offset, SEEK_CUR))
     {
@@ -108,12 +108,13 @@ static void seek_past(uint32_t offset, FILE * infile)
 
 /* audio decode */
 
+// IMA ADPCM status word
 struct audio_state
 {
     struct
     {
-        int16_t hist;
-        int8_t idx;
+        int16_t hist; // predictor
+        int8_t idx; // step
     } *ch;
 };
 
@@ -134,11 +135,11 @@ const int32_t IMA_Steps[89] =
 
 };
 
-const int8_t IMA_IndexTable[16] = 
+const int8_t IMA_IndexTable[16] =
 
 {
     -1, -1, -1, -1, 2, 4, 6, 8,
-    -1, -1, -1, -1, 2, 4, 6, 8 
+    -1, -1, -1, -1, 2, 4, 6, 8
 };
 
 static int16_t clamp16(int32_t v)
@@ -148,9 +149,9 @@ static int16_t clamp16(int32_t v)
     return v;
 }
 
-static void decode_audio(struct audio_state *state, int first_aud, uint32_t sample_count, FILE *infile, FILE *outfile, int channels)
+static void decode_audio(struct audio_state* state, int first_aud, uint32_t sample_count, FILE* infile, FILE* outfile, int channels)
 {
-    int16_t * samples = samples = malloc(sample_count*sizeof(int16_t)*channels);
+    int16_t* samples = malloc(sample_count * sizeof(int16_t) * channels);
     uint32_t t = 0, i = 0;
 
     if (first_aud)
@@ -174,14 +175,14 @@ static void decode_audio(struct audio_state *state, int first_aud, uint32_t samp
         {
             samples[t++] = state->ch[c].hist;
         }
-        i ++;
+        i++;
     }
 
     uint8_t b;
     int bitsleft = 0;
     for (; i < sample_count; i++)
     {
-        for (int c = channels-1; c >= 0; c--)
+        for (int c = channels - 1; c >= 0; c--)
         {
             if (bitsleft == 0)
             {
@@ -197,7 +198,7 @@ static void decode_audio(struct audio_state *state, int first_aud, uint32_t samp
 
             if (b & 0x80) state->ch[c].hist = clamp16(state->ch[c].hist - ima_delta);
             else state->ch[c].hist = clamp16(state->ch[c].hist + ima_delta);
-            state->ch[c].idx += IMA_IndexTable[(b&0xf0)>>4];
+            state->ch[c].idx += IMA_IndexTable[(b & 0xf0) >> 4];
             if (state->ch[c].idx > 88) state->ch[c].idx = 88;
             if (state->ch[c].idx < 0) state->ch[c].idx = 0;
 
@@ -211,7 +212,7 @@ static void decode_audio(struct audio_state *state, int first_aud, uint32_t samp
         }
     }
 
-    if (sample_count != fwrite(samples, sizeof(int16_t)*channels, sample_count, outfile))
+    if (sample_count != fwrite(samples, sizeof(int16_t) * channels, sample_count, outfile))
     {
         fprintf(stderr, "error writing output\n");
         exit(EXIT_FAILURE);
@@ -249,11 +250,12 @@ struct HVQM4_header
     uint8_t  unk3B;         /* 0x3B (0) */
     uint8_t  audio_channels;/* 0x3C */
     uint8_t  audio_bitdepth;/* 0x3D */
-    uint16_t pad;           /* 0x3E-0x3F (0) */
+    uint8_t  audio_format;  /* 0x3E */
+    uint8_t  audio_tracks;  /* 0x3F */
     uint32_t audio_srate;   /* 0x40-0x43 */
 };
 
-static void load_header(struct HVQM4_header *header, uint8_t *raw_header)
+static void load_header(struct HVQM4_header* header, uint8_t* raw_header)
 {
     /* check MAGIC */
     if (!memcmp(HVQM4_13_magic, &raw_header[0], 16))
@@ -286,7 +288,8 @@ static void load_header(struct HVQM4_header *header, uint8_t *raw_header)
     header->unk3B = raw_header[0x3B];
     header->audio_channels = raw_header[0x3C];
     header->audio_bitdepth = raw_header[0x3D];
-    header->pad = read16(&raw_header[0x3E]);
+    header->audio_format = raw_header[0x3E];
+    header->audio_tracks = raw_header[0x3F] + 1;
     header->audio_srate = read32(&raw_header[0x40]);
 
     expect32_text(0x44, header->header_size, "header size");
@@ -324,7 +327,7 @@ static void load_header(struct HVQM4_header *header, uint8_t *raw_header)
     /* no check for srate, can be 0 */
 }
 
-void display_header(struct HVQM4_header *header)
+void display_header(struct HVQM4_header* header)
 {
     switch (header->version)
     {
@@ -345,16 +348,20 @@ void display_header(struct HVQM4_header *header)
     if (header->audio_frames)
     {
         printf("%d Audio frames\n", header->audio_frames);
-        printf("Sample rate: %"PRIu32" Hz\n", header->audio_srate);
         printf("Audio frame size: 0x%"PRIx32"\n", header->audio_frame_sz);
         printf("Audio channels: %u\n", header->audio_channels);
-    } else {
+        printf("Audio bitdepth: %u\n", header->audio_bitdepth);
+        printf("Audio format: %u\n", header->audio_format);
+        printf("Audio tracks: %u\n", header->audio_tracks);
+        printf("Sample rate: %"PRIu32" Hz\n", header->audio_srate);
+    }
+    else {
         printf("No audio!\n");
     }
     printf("\n");
 }
 
-static void put_32bitLE(uint8_t * buf, uint32_t v)
+static void put_32bitLE(uint8_t* buf, uint32_t v)
 {
     for (unsigned int i = 0; i < 4; i++)
     {
@@ -363,7 +370,7 @@ static void put_32bitLE(uint8_t * buf, uint32_t v)
     }
 }
 
-static void put_16bitLE(uint8_t * buf, uint16_t v)
+static void put_16bitLE(uint8_t* buf, uint16_t v)
 {
     for (unsigned int i = 0; i < 2; i++)
     {
@@ -372,53 +379,78 @@ static void put_16bitLE(uint8_t * buf, uint16_t v)
     }
 }
 
+const char* TRACK_SUFFIX = "_track";
+
+int num_places(int n)
+{
+    int r = 1;
+    if (n < 0) n = (n == INT_MIN) ? INT_MAX : -n;
+    while (n > 9) {
+        n /= 10;
+        r++;
+    }
+    return r;
+}
+
+static char* get_filename_with_track_num(char* filename, uint8_t track_num, uint8_t total_num_tracks)
+{
+    int digits = num_places(total_num_tracks);
+    char* new_filename = malloc(strlen(filename) + strlen(TRACK_SUFFIX) + digits);
+    char* dot = strrchr(filename, '.');
+
+    int filename_len_without_ext = dot - filename;
+    strncpy(new_filename, filename, filename_len_without_ext);
+    sprintf(new_filename + filename_len_without_ext, "%s%0*u%s", TRACK_SUFFIX, digits, track_num, dot);
+    return new_filename;
+}
+
 /* make a header for 16-bit PCM .wav */
 /* buffer must be 0x2c bytes */
-static void make_wav_header(uint8_t * buf, int32_t sample_count, int32_t sample_rate, int channels) {
+static void make_wav_header(uint8_t* buf, int32_t sample_count, int32_t sample_rate, int channels) {
     size_t bytecount;
 
-    bytecount = sample_count*channels*2;
+    bytecount = sample_count * channels * 2;
 
     /* RIFF header */
-    memcpy(buf+0, "RIFF", 4);
+    memcpy(buf + 0, "RIFF", 4);
     /* size of RIFF */
-    put_32bitLE(buf+4, (int32_t)(bytecount+0x2c-8));
+    put_32bitLE(buf + 4, (int32_t)(bytecount + 0x2c - 8));
 
     /* WAVE header */
-    memcpy(buf+8, "WAVE", 4);
+    memcpy(buf + 8, "WAVE", 4);
 
     /* WAVE fmt chunk */
-    memcpy(buf+0xc, "fmt ", 4);
+    memcpy(buf + 0xc, "fmt ", 4);
     /* size of WAVE fmt chunk */
-    put_32bitLE(buf+0x10, 0x10);
+    put_32bitLE(buf + 0x10, 0x10);
 
     /* compression code 1=PCM */
-    put_16bitLE(buf+0x14, 1);
+    put_16bitLE(buf + 0x14, 1);
 
     /* channel count */
-    put_16bitLE(buf+0x16, channels);
+    put_16bitLE(buf + 0x16, channels);
 
     /* sample rate */
-    put_32bitLE(buf+0x18, sample_rate);
+    put_32bitLE(buf + 0x18, sample_rate);
 
     /* bytes per second */
-    put_32bitLE(buf+0x1c, sample_rate*channels*2);
+    put_32bitLE(buf + 0x1c, sample_rate * channels * 2);
 
     /* block align */
-    put_16bitLE(buf+0x20, (int16_t)(channels*2));
+    put_16bitLE(buf + 0x20, (int16_t)(channels * 2));
 
     /* significant bits per sample */
-    put_16bitLE(buf+0x22, 2*8);
+    put_16bitLE(buf + 0x22, 2 * 8);
 
     /* PCM has no extra format bytes, so we don't even need to specify a count */
 
     /* WAVE data chunk */
-    memcpy(buf+0x24, "data", 4);
+    memcpy(buf + 0x24, "data", 4);
     /* size of WAVE data chunk */
-    put_32bitLE(buf+0x28, (int32_t)bytecount);
+    put_32bitLE(buf + 0x28, (int32_t)bytecount);
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     printf("h4m 'HVQM4 1.3/1.5' audio decoder 0.3 by hcs\n\n");
     if (argc != 3)
@@ -428,7 +460,7 @@ int main(int argc, char **argv)
     }
 
     /* open input */
-    FILE *infile = fopen(argv[1], "rb");
+    FILE* infile = fopen(argv[1], "rb");
     if (!infile)
     {
         fprintf(stderr, "failed opening %s\n", argv[1]);
@@ -455,21 +487,37 @@ int main(int argc, char **argv)
     }
 
     /* open output */
-    FILE *outfile = fopen(argv[2], "wb");
-    if (!outfile)
+    FILE** outfiles = malloc(header.audio_tracks * sizeof(FILE*));
+    char** outfile_paths = malloc(header.audio_tracks * sizeof(char*));
+    outfile_paths[0] = argv[2];
+
+    for (int i = 0; i < header.audio_tracks; i++)
     {
-        fprintf(stderr, "error opening %s\n", argv[2]);
-        exit(EXIT_FAILURE);
+        if (i > 0 || header.audio_tracks > 1)
+        {
+            outfile_paths[i] = get_filename_with_track_num(argv[2], i + 1, header.audio_tracks);
+        }
+
+        outfiles[i] = fopen(outfile_paths[i], "wb");
+        if (!outfiles[i])
+        {
+            fprintf(stderr, "error opening %s\n", outfile_paths[i]);
+            exit(EXIT_FAILURE);
+        }
     }
 
     /* fill in the space that we'll put the header in later */
-    uint8_t riff_header[0x2c];
-    if (0x2c != fwrite(riff_header, 1, 0x2c, outfile))
+    uint8_t** riff_header = malloc(header.audio_tracks * sizeof(uint8_t*));
+    for (int i = 0; i < header.audio_tracks; i++)
     {
-        fprintf(stderr, "error writing riff header\n");
-        exit(EXIT_FAILURE);
+        riff_header[i] = malloc(0x2c);
+        if (0x2c != fwrite(riff_header[i], 1, 0x2c, outfiles[i]))
+        {
+            fprintf(stderr, "error writing riff header for %s\n", outfile_paths[i]);
+            exit(EXIT_FAILURE);
+        }
     }
-    
+
     /* parse blocks */
     uint32_t block_count = 0;
     uint32_t total_aud_frames = 0;
@@ -487,57 +535,62 @@ int main(int argc, char **argv)
         expect32(0x01000000, infile);   /* EOS marker? */
         const long data_start = ftell(infile);
 
-        block_count ++;
+        block_count++;
 #ifdef VERBOSE_PRINT
         printf("block %d starts at 0x%lx, length 0x%"PRIx32"\n", (int)block_count, block_start, expected_block_size);
 #endif
 
         /* parse frames */
         struct audio_state audio_state;
-        int first_vid=1, first_aud=1;
+        int first_vid = 1, first_aud = 1;
         uint32_t vid_frame_count = 0, aud_frame_count = 0;
-        int block_sample_count =0;
+        int block_sample_count = 0;
 
         audio_state.ch = calloc(header.audio_channels, sizeof(*audio_state.ch));
         while (aud_frame_count < expected_aud_frame_count ||
-               vid_frame_count < expected_vid_frame_count)
+            vid_frame_count < expected_vid_frame_count)
         {
             const uint16_t frame_id1 = get16(infile);
             const uint16_t frame_id2 = get16(infile);
             const uint32_t frame_size = get32(infile);
 
 #ifdef VERBOSE_PRINT
-            printf("frame id 0x%"PRIx16",0x%"PRIx16" ",frame_id1,frame_id2);
+            printf("frame id 0x%"PRIx16",0x%"PRIx16" ", frame_id1, frame_id2);
             printf("size 0x%"PRIx32"\n", frame_size);
 #endif
 
             if (frame_id1 == 1 && (
-                        (header.version == HVQM4_13 && frame_id2 == 0x10) ||
-                        (header.version == HVQM4_13 && frame_id2 == 0x30) ||
-                        (first_vid && frame_id2 == 0x10) ||
-                        (!first_vid && frame_id2 == 0x20)))
+                (header.version == HVQM4_13 && frame_id2 == 0x10) ||
+                (header.version == HVQM4_13 && frame_id2 == 0x30) ||
+                (first_vid && frame_id2 == 0x10) ||
+                (!first_vid && frame_id2 == 0x20)))
             {
                 /* video */
                 first_vid = 0;
-                vid_frame_count ++;
-                total_vid_frames ++;
+                vid_frame_count++;
+                total_vid_frames++;
 #ifdef VERBOSE_PRINT
                 printf("video frame %d/%d (%d)\n", (int)vid_frame_count, (int)expected_vid_frame_count, (int)total_vid_frames);
 #endif
                 seek_past(frame_size, infile);
             }
             else if (frame_id1 == 0 &&
-                ((first_aud && ( frame_id2 == 3 || frame_id2 == 1)) ||
-                (!first_aud && frame_id2 == 2)))
+                ((first_aud && (frame_id2 == 3 || frame_id2 == 1)) ||
+                    (!first_aud && frame_id2 == 2)))
 
             {
                 /* audio */
                 const long audio_started = ftell(infile);
                 const uint32_t samples = get32(infile);
-                decode_audio(&audio_state, first_aud, samples, infile, outfile, header.audio_channels);
+
+                for (int i = 0; i < header.audio_tracks; i++)
+                {
+                    decode_audio(&audio_state, first_aud, samples, infile, outfiles[i], header.audio_channels);
+                }
+
                 block_sample_count += samples;
-                aud_frame_count ++;
-                total_aud_frames ++;
+                aud_frame_count++;
+                total_aud_frames++;
 #ifdef VERBOSE_PRINT
                 printf("0x%lx: audio frame %d/%d (%d) (%d samples)\n", (unsigned long)audio_started, (int)aud_frame_count, (int)expected_aud_frame_count, (int)total_aud_frames, samples);
 #endif
@@ -545,16 +598,18 @@ int main(int argc, char **argv)
                 long bytes_done_unto = ftell(infile) - audio_started;
                 if (bytes_done_unto > frame_size)
                 {
-                    fprintf(stderr, "processed 0x%lx bytes, should have done 0x%"PRIx32"\n",
+                    fprintf(stderr, "processed 0x%lx bytes in frame, should have done 0x%"PRIx32"\n",
                         bytes_done_unto, frame_size);
                     exit(EXIT_FAILURE);
                 }
                 else if (bytes_done_unto < frame_size)
                 {
+                    printf("used %d/%d bytes\n", bytes_done_unto, frame_size);
                     while (bytes_done_unto < frame_size)
                     {
+                        /* TODO: don't throw out extra audio data, actually put it into separate wav files */
                         get8(infile);
-                        bytes_done_unto ++;
+                        bytes_done_unto++;
                     }
                 }
             }
@@ -562,7 +617,7 @@ int main(int argc, char **argv)
             {
                 fprintf(stderr, "unexpected frame id at %08lx\n", (unsigned long)ftell(infile));
                 exit(EXIT_FAILURE);
-                printf("unexpected frame id %d %d at %08lx\n", frame_id1, frame_id2, (unsigned long)(ftell(infile)-8));
+                printf("unexpected frame id %d %d at %08lx\n", frame_id1, frame_id2, (unsigned long)(ftell(infile) - 8));
                 seek_past(frame_size, infile);
             }
         }
@@ -577,7 +632,7 @@ int main(int argc, char **argv)
 #ifdef VERBOSE_PRINT
         printf("block %d ended at 0x%lx (%d samples)\n", (int)block_count, ftell(infile), block_sample_count);
 #endif
-        if (ftell(infile) != (data_start+expected_block_size))
+        if (ftell(infile) != (data_start + expected_block_size))
         {
             fprintf(stderr, "block size mismatch\n");
             exit(EXIT_FAILURE);
@@ -595,17 +650,20 @@ int main(int argc, char **argv)
     printf("%"PRIu32" samples\n", total_sample_count);
 
     // generate header
-    make_wav_header(riff_header, total_sample_count, header.audio_srate, header.audio_channels);
-    fseek(outfile, 0, SEEK_SET);
-    if (0x2c != fwrite(riff_header, 1, 0x2c, outfile))
+    for (int i = 0; i < header.audio_tracks; i++)
     {
-        fprintf(stderr, "error rewriting riff header\n");
-        exit(EXIT_FAILURE);
-    }
-    if (EOF == fclose(outfile))
-    {
-        fprintf(stderr, "error finishing output\n");
-        exit(EXIT_FAILURE);
+        make_wav_header(riff_header[i], total_sample_count, header.audio_srate, header.audio_channels);
+        fseek(outfiles[i], 0, SEEK_SET);
+        if (0x2c != fwrite(riff_header[i], 1, 0x2c, outfiles[i]))
+        {
+            fprintf(stderr, "error rewriting riff header for %s\n", outfile_paths[i]);
+            exit(EXIT_FAILURE);
+        }
+        if (EOF == fclose(outfiles[i]))
+        {
+            fprintf(stderr, "error finishing output for %s\n", outfile_paths[i]);
+            exit(EXIT_FAILURE);
+        }
     }
 
     printf("Done!\n");
